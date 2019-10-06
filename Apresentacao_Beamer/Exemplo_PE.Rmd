@@ -1,0 +1,246 @@
+---
+title: 'Modelos Lineares Generalizados'
+author: "Guilherme Rodrigues"
+date: "2/2019"
+output: 
+  beamer_presentation:
+    keep_tex: true
+    includes:
+     in_header: Estilo.txt
+    theme: "metropolis"
+    latex_engine: xelatex
+---
+
+```{r message=FALSE, warning=FALSE, include=T, paged.print=FALSE, results='hide', echo=F}
+library(knitr)
+library(tidyverse)
+library(reshape2)
+require(broom)
+opts_chunk$set(fig.align="center", fig.height=3.3, fig.width=4.2)
+opts_knit$set(out.format="latex")
+knitr::opts_chunk$set(dev='pdf')
+
+tema.slides <- theme_get() + 
+  theme(legend.position="bottom", 
+        legend.background=element_rect(gray(.98), "white"),
+        legend.key = element_rect(gray(.98), gray(.98)),
+        plot.background = element_rect(fill=gray(.98), gray(.98)),
+        plot.caption = element_text(size=.8),
+        axis.title.x=element_text(vjust=-1, size=10),
+        axis.title.y=element_text(size=10)
+        )
+theme_set(tema.slides)
+```
+
+
+## Exemplo: notas em PE
+A disciplina de Probabilidade e Estatistica (PE) da UnB adota um sistema de avaliação automatizado usando o pacote `R` `exams`. Neste exemplo, usaremos os dados do primeiro semestre de 2019 para modelar o efeito do resultado da primeira prova na nota final do aluno no curso (desconsiderando-se a prova substitutiva).
+
+##
+\begin{textblock*}{0cm}(0cm,-.5cm)
+   \includegraphics[width=6.3in]{Foto_exame}
+\end{textblock*}
+
+
+# Análise exploratória dos dados
+
+## Carregando o banco de dados e os pacotes
+\small
+```{r eval=T, echo=T, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(reshape2)
+library(broom)
+dados.originais <- read.csv2("Banco_respostas.csv")
+str(dados.originais)
+```
+
+
+\only<2>{
+\begin{textblock}{1}[0, .5](5.3, 9.1)
+\begin{tikzpicture}
+    \draw[red, ultra thick,rounded corners] (0,0) rectangle (5.7,.6);
+\end{tikzpicture}
+\end{textblock}
+}
+
+
+## Tranformando os dados
+\small
+```{r eval=T, echo=T, message=FALSE, warning=FALSE, paged.print=FALSE, results=FALSE, cache=T}
+indices <- match(unique(dados.originais$Matricula), 
+                 dados.originais$Matricula)
+dados <- dados.originais %>% 
+  filter(Numero.prova <= 3) %>%  
+  group_by(Matricula, Numero.prova) %>%  
+  summarize(Nota_prova = sum(Acertou)) %>%  
+  dcast(Matricula ~ Numero.prova, value.var="Nota_prova") %>%  
+  mutate_all(list(~replace_na(., 0))) %>% 
+  rename(P1=2, P2=3, P3=4) %>%  
+  mutate(Nota_final=(.3*P1 + .3*P2 + .4*P3), 
+         Aprovado=Nota_final>=5) %>%
+  left_join(dados.originais[indices, ], by="Matricula")
+```
+
+
+
+## Dados Transformados
+\small
+
+```{r echo=T, results=TRUE}
+str(dados)
+```
+
+\only<2>{
+\begin{textblock}{1}[0, .5](5.3, 4.8)
+\begin{tikzpicture}
+    \draw[red, ultra thick,rounded corners] (0,0) rectangle (5.7,.6);
+\end{tikzpicture}
+\end{textblock}
+}
+
+
+## Sumarizando os dados de acordo com a prova 1
+\small
+```{r eval=T, echo=T, cache=T}
+dados.agrupados <- dados %>% 
+  group_by(P1) %>%
+  summarise(n=n(),
+            reprovados=n() - sum(Aprovado),
+            aprovados=sum(Aprovado),
+            taxa=mean(Aprovado))
+dados.agrupados
+```
+
+## Plotando o gráfico de Y em X
+\small
+```{r eval=T, echo=T, results=F, cache=T}
+grafico.y <- ggplot(dados) + 
+  labs(y="Aprovação", x="Nota na P1") +
+  geom_jitter(aes(P1, as.numeric(Aprovado), color=Aprovado), 
+              height=.1, width=.2, alpha=.5) + 
+  scale_color_discrete(labels=c("Não", "Sim")) +
+  geom_line(data=dados.agrupados, aes(P1, taxa), lwd=.5) +
+  scale_y_discrete(breaks=c(0, 1), 
+                   labels=c("Não", "Sim"), 
+                   limits=c(0, 1))
+```
+
+## 
+```{r eval=T, echo=F, message=FALSE, warning=FALSE}
+grafico.y
+```
+
+
+# Definindo o modelo
+
+## Definindo o Modelo Logístico
+\begin{alignat*}{3}
+   & \text{\alert{Distribuição das observações:}} \quad && Y_i \stackrel{\small{ind.}}{\sim} \text{Bernoulli}(p_i) \\
+   & \text{\alert{Função de ligação logito:}} && g(p_i) = \log \left(\frac{p_i}{1-p_i}\right) \\
+   & && \phantom{ g(p_i) } = \eta_i =\Xb_i'\betab = \sum_{j=1}^p X_{ji}\beta_j,
+\end{alignat*}
+onde $\eta_i$ é o \alert{preditor linear} (relacionado ao indivíduo $i$), $X_{ji}$ é o valor da covariável $j$ associada ao indivíduo $i$ (fixa e conhecida) e $\betab=(\beta_1,....,\beta_p)'$ é um vetor de parâmetros desconhecidos.
+Neste exemplo, iremos considerar $\beta=(\beta_0, \beta_1)$, onde $\beta_0$ é o intercepto e $\beta_1$ o o efeito da Prova 1 nota na nota final do aluno.
+
+## Suposições (parte 1)
+
+- O modelo assume que as notas dos alunos são independentes umas das outras. Isso \alert{não} parece razoável, uma vez que os alunos estão agrupados em turmas. Alternativas: incorporar a informação da turma entre as covariáveis ou adotar modelos hierarquicos (modelos mixtos).
+
+- Como apenas as notas na P1 foram consideradas no modelo, os alunos de um mesmo curso também terão notas correlacionadas. Alternativas: incluir variáveis faltantes.
+
+## Suposições (parte 2)
+
+- A probabilidade de aprovação cresce (ou decresce) monotonicamente em função da nota na P1. É possível que isso não seja razoável. Alternativas: incluir outros termos polinomiais ou adotar modelos aditivos generalizados (GAN).
+
+- A função de ligação logito é adequada. É importante avaliar se outras opções (probito, por exemplo) resulta em um modelo de maior qualidade.
+
+- Pode-se modelar a aprovação indiretamente, modelando-se a nota final dos alunos.
+
+
+
+# Estimador de máxima verossimilhança (EMV)
+
+## Função logistica e Log-verossimilhança
+```{r eval=T, echo=T}
+# Função logistica (inverso da logito)
+logistic <- function(eta) exp(eta) / (1 + exp(eta)) 
+
+# Log-verossimilhança
+log.L <- function(beta, x, y) {
+  eta <- x %*% beta  
+  p <- logistic(eta) 
+  sum(dbinom(y, 1, p, log=T)) 
+} 
+```
+
+## Plotando a log-verossimilhança em um grid (parte 1)
+\small
+```{r eval=T, echo=T, results=FALSE, cache=T}
+X <- cbind(1, dados$P1)  # Matriz de delineamento
+Y <- dados$Aprovado # Vetor das observações
+beta.grid <-  expand.grid(beta0.grid = seq(-5, 0, .01), 
+  beta1.grid = seq(0, 1, .01))
+log.L.grid <- apply(beta.grid, 1, 
+                    function(.) log.L(., x=X, y=Y))
+data.grid <- cbind(beta.grid, log.L.grid)
+```
+
+
+## Plotando a log-verossimilhança em um grid (parte 2)
+\small
+```{r eval=T, echo=T, results=FALSE, cache=T}
+contorno <- ggplot(data.grid, 
+                   aes(beta0.grid, 
+                       beta1.grid, 
+                       z=exp(log.L.grid))) +
+  geom_contour() +
+  labs(y=expression(beta[1]), x=expression(beta[0]))
+```
+
+
+## 
+```{r eval=T, echo=F, message=FALSE, warning=FALSE}
+contorno
+```
+
+
+## Ajustando o modelo usando a função `optim`
+```{r eval=T, echo=T, cache=T}
+aux <- optim(c(0,0), function(.) -log.L(., x=X, y=Y), 
+             hessian=T)
+(beta.hat <- aux$par) # Estimativa dos parâmetros 
+solve(aux$hessian)  # Covariâncias
+```
+
+
+##
+
+```{r contorno, eval=T, echo=F, message=FALSE, warning=FALSE, fig.show="hide", cache=T}
+contorno
+contorno +
+  geom_point(x=beta.hat[1], y=beta.hat[2],
+             shape=8, color="red")
+```
+
+\begin{onlyenv}<1-2>
+  \begin{center}
+   \includegraphics<1>{Exemplo_PE_files/figure-beamer/contorno-1}
+   \includegraphics<2>{Exemplo_PE_files/figure-beamer/contorno-2}
+  \end{center}
+\end{onlyenv}
+
+
+## Visualizando a estimativa (dispersão)
+```{r eval=T, echo=T, message=FALSE, warning=FALSE, cache=T}
+eta.hat <- cbind(1, 0:10) %*% beta.hat
+p.hat <- logistic(eta.hat)
+hats <- data.frame(x=0:10, eta.hat, p.hat)
+modelo.plot <- grafico.y + 
+  geom_line(data=hats, aes(x, p.hat), col="blue", lty=3)
+```
+
+##
+```{r eval=T, echo=F, message=FALSE, warning=FALSE}
+modelo.plot
+```
+  
