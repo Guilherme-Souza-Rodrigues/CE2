@@ -253,3 +253,8 @@ modelo.plot
 ```{r eval=T, echo=T, message=FALSE, warning=FALSE}
 # Testando - 2
 ```
+
+## Acrescentando um slide - 4
+```{r eval=T, echo=T, message=FALSE, warning=FALSE}
+# Testando - 4
+```
