@@ -36,11 +36,6 @@ theme_set(tema.slides)
 ## Exemplo: notas em PE
 A disciplina de Probabilidade e Estatistica (PE) da UnB adota um sistema de avaliação automatizado usando o pacote `R` `exams`. Neste exemplo, usaremos os dados do primeiro semestre de 2019 para modelar o efeito do resultado da primeira prova na nota final do aluno no curso (desconsiderando-se a prova substitutiva).
 
-##
-\begin{textblock*}{0cm}(0cm,-.5cm)
-   \includegraphics[width=6.3in]{Foto_exame}
-\end{textblock*}
-
 
 # Análise exploratória dos dados
 
