@@ -244,3 +244,7 @@ modelo.plot <- grafico.y +
 modelo.plot
 ```
   
+## Acrescentando um slide
+```{r eval=T, echo=T, message=FALSE, warning=FALSE}
+# Testando
+```
